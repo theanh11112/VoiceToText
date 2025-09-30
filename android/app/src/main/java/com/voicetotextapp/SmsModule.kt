@@ -1,4 +1,3 @@
-// SmsModule.kt
 package com.voicetotextapp
 
 import android.content.Context
@@ -11,44 +10,48 @@ import org.json.JSONObject
 class SmsModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext), LifecycleEventListener {
 
-    private val smsQueue = mutableListOf<JSONObject>()
     private var isReactReady = false
+    private var isListenerReady = false
+
+    companion object {
+        private var staticReactContext: ReactApplicationContext? = null
+
+        // Cho SmsReceiver gọi khi RN context chưa sẵn sàng
+        fun enqueueSmsStatic(from: String, body: String) {
+            staticReactContext?.getNativeModule(SmsModule::class.java)?.enqueueSms(from, body)
+                ?: run {
+                    // Lưu tạm trong SharedPreferences
+                    val prefs = staticReactContext?.getSharedPreferences("sms_cache", Context.MODE_PRIVATE)
+                    prefs?.let {
+                        val json = it.getString("sms_list", "[]")
+                        val list = JSONArray(json)
+                        val obj = JSONObject().apply {
+                            put("from", from)
+                            put("body", body)
+                            put("emitted", false)
+                        }
+                        list.put(obj)
+                        it.edit().putString("sms_list", list.toString()).apply()
+                        Log.d("SmsModule", "📥 enqueueSmsStatic: $from → $body")
+                    }
+                }
+        }
+    }
 
     override fun getName(): String = "SmsModule"
 
     override fun initialize() {
         super.initialize()
         reactContext.addLifecycleEventListener(this)
+        staticReactContext = reactContext
         isReactReady = reactContext.hasActiveCatalystInstance()
-        if (isReactReady) flushQueue()
+        Log.d("SmsModule", "📱 initialize: isReactReady=$isReactReady")
+        flushCachedSmsToJS()
     }
 
-    private fun flushQueue() {
-        val prefs = reactContext.getSharedPreferences("sms_cache", Context.MODE_PRIVATE)
-        val json = prefs.getString("sms_list", "[]")
-        val list = JSONArray(json)
-        var changed = false
-
-        // Chỉ emit SMS chưa emit
-        for (i in 0 until list.length()) {
-            val obj = list.getJSONObject(i)
-            if (!obj.optBoolean("emitted", false)) {
-                emitSms(obj.getString("from"), obj.getString("body"))
-                obj.put("emitted", true)
-                changed = true
-            }
-        }
-
-        // Cập nhật trạng thái đã emit
-        if (changed) {
-            prefs.edit().putString("sms_list", list.toString()).apply()
-        }
-
-        // Flush queue cục bộ
-        for (sms in smsQueue) {
-            emitSms(sms.getString("from"), sms.getString("body"))
-        }
-        smsQueue.clear()
+    fun setListenerReady() {
+        isListenerReady = true
+        flushCachedSmsToJS()
     }
 
     fun enqueueSms(from: String, body: String) {
@@ -58,21 +61,37 @@ class SmsModule(private val reactContext: ReactApplicationContext) :
             put("emitted", false)
         }
 
-        // Lưu SharedPreferences
         val prefs = reactContext.getSharedPreferences("sms_cache", Context.MODE_PRIVATE)
         val json = prefs.getString("sms_list", "[]")
         val list = JSONArray(json)
         list.put(obj)
         prefs.edit().putString("sms_list", list.toString()).apply()
+        Log.d("SmsModule", "📥 enqueueSms: $from → $body | isReactReady=$isReactReady | listenerReady=$isListenerReady")
 
-        // Nếu RN chưa sẵn sàng, thêm vào queue cục bộ
-        if (isReactReady) {
-            emitSms(from, body)
-            obj.put("emitted", true)
-            prefs.edit().putString("sms_list", list.toString()).apply()
-        } else {
-            smsQueue.add(obj)
+        if (isReactReady && isListenerReady) {
+            flushCachedSmsToJS()
         }
+    }
+
+    private fun flushCachedSmsToJS() {
+        val prefs = reactContext.getSharedPreferences("sms_cache", Context.MODE_PRIVATE)
+        val json = prefs.getString("sms_list", "[]")
+        val list = JSONArray(json)
+        var changed = false
+
+        for (i in 0 until list.length()) {
+            val sms = list.getJSONObject(i)
+            if (!sms.optBoolean("emitted", false)) {
+                emitSms(sms.getString("from"), sms.getString("body"))
+                sms.put("emitted", true)
+                changed = true
+            }
+        }
+
+        if (changed) {
+            prefs.edit().putString("sms_list", list.toString()).apply()
+        }
+        Log.d("SmsModule", "flushCachedSmsToJS: ${list.length()} SMS trong cache")
     }
 
     private fun emitSms(from: String, body: String) {
@@ -81,34 +100,22 @@ class SmsModule(private val reactContext: ReactApplicationContext) :
             putString("body", body)
         }
         reactContext.runOnUiQueueThread {
-            reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                 .emit("onSmsReceived", params)
         }
-        Log.d("SmsModule", "Emit SMS: $from → $body")
+        Log.d("SmsModule", "📤 Emit SMS: $from → $body")
+    }
+
+    @ReactMethod
+    fun flushCachedSmsToJSForJS() {
+        setListenerReady()
     }
 
     override fun onHostResume() {
         isReactReady = true
-        flushQueue()
+        flushCachedSmsToJS()
     }
-    override fun onHostPause() { }
-    override fun onHostDestroy() { }
 
-    @ReactMethod
-    fun getLastSms(promise: Promise) {
-        val prefs = reactContext.getSharedPreferences("sms_cache", Context.MODE_PRIVATE)
-        val json = prefs.getString("sms_list", "[]")
-        val list = JSONArray(json)
-        if (list.length() > 0) {
-            val last = list.getJSONObject(list.length() - 1)
-            val map = Arguments.createMap().apply {
-                putString("from", last.getString("from"))
-                putString("body", last.getString("body"))
-            }
-            promise.resolve(map)
-        } else {
-            promise.resolve(null)
-        }
-    }
+    override fun onHostPause() {}
+    override fun onHostDestroy() {}
 }

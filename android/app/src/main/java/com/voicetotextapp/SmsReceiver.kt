@@ -1,4 +1,3 @@
-// SmsReceiver.kt
 package com.voicetotextapp
 
 import android.content.BroadcastReceiver
@@ -10,7 +9,6 @@ import android.util.Log
 import com.facebook.react.ReactApplication
 
 class SmsReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context, intent: Intent) {
         val bundle: Bundle = intent.extras ?: return
         val pdus = bundle["pdus"] as? Array<*> ?: return
@@ -21,12 +19,10 @@ class SmsReceiver : BroadcastReceiver() {
             val from = sms.originatingAddress ?: ""
             val body = sms.messageBody ?: ""
 
-            Log.d("SmsReceiver", "Nhận SMS từ: $from, nội dung: $body")
+            Log.d("SmsReceiver", "📩 Nhận SMS từ: $from, nội dung: $body")
 
-            // Emit SMS realtime qua module
-            val reactApp = context.applicationContext as ReactApplication
-            val reactContext = reactApp.reactNativeHost.reactInstanceManager.currentReactContext
-            reactContext?.getNativeModule(SmsModule::class.java)?.enqueueSms(from, body)
+            // Gọi enqueue tĩnh, đảm bảo luôn lưu cache
+            SmsModule.enqueueSmsStatic(from, body)
         }
     }
 }
