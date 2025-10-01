@@ -7,27 +7,21 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.voicetotextapp.SpeechPackage
-import com.voicetotextapp.SmsPackage  // <-- import SmsPackage
+import com.voicetotextapp.SmsPackage
 
 class MainApplication : Application(), ReactApplication {
 
     override val reactNativeHost =
         object : DefaultReactNativeHost(this) {
             override fun getPackages(): List<ReactPackage> {
-                // Lấy danh sách package từ autolinking
                 val packages = PackageList(this).packages.toMutableList()
-
-                // Thêm các package thủ công
                 packages.add(SpeechPackage())
-                packages.add(SmsPackage())  // <-- thêm SmsPackage
-
+                packages.add(SmsPackage())
                 return packages
             }
 
             override fun getJSMainModuleName(): String = "index"
-
             override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
-
             override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
             override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
         }
@@ -40,6 +34,8 @@ class MainApplication : Application(), ReactApplication {
 
     override fun onCreate() {
         super.onCreate()
+        // ✅ Lưu ReactApplication vào AppContextHolder
+        AppContextHolder.app = this
         com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative(this)
     }
 }

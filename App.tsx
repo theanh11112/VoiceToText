@@ -41,10 +41,11 @@ export default function App() {
       setSmsList((prev) => [{ ...data, translated }, ...prev]);
     });
 
-    // Set listener ready để flush SMS cũ
+    //Set listener ready để flush SMS cũ
     if (NativeModules.SmsModule?.flushCachedSmsToJSForJS) {
-      NativeModules.SmsModule.flushCachedSmsToJSForJS();
+      NativeModules.SmsModule?.flushCachedSmsToJSForJS();
     }
+    
 
     // Voice-to-text listener
     const speechSub = SpeechModule.addSpeechResultListener((e: SpeechEvent) => {
@@ -91,19 +92,20 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.block}>
-        <Button title="🎤 Start Voice" onPress={() => SpeechModule.startListening()} />
+        {/* <Button title="🎤 Start Voice" onPress={() => SpeechModule.startListening()} /> */}
         <View style={styles.spacer} />
-        <Button title="⏹ Stop Voice" onPress={() => SpeechModule.stopListening()} />
+        {/* <Button title="⏹ Stop Voice" onPress={() => SpeechModule.stopListening()} /> */}
       </View>
 
       <View style={styles.block}>
-        <Text style={styles.label}>Voice Result:</Text>
+        {/* <Text style={styles.label}>Voice Result:</Text> */}
         <Text>{speechText}</Text>
       </View>
 
       <View style={styles.block}>
         <Text style={styles.label}>Latest SMS:</Text>
         {smsList.map((s, idx) => (
+          // eslint-disable-next-line react-native/no-inline-styles
           <View key={idx} style={{ marginBottom: 8 }}>
             <Text>📩 From: {s.from}</Text>
             <Text>🇻🇳 Body: {s.body}</Text>
@@ -123,3 +125,4 @@ const styles = StyleSheet.create({
   label: { fontWeight: 'bold' },
   spacer: { height: 8 },
 });
+
